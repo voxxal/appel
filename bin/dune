@@ -1,0 +1,9 @@
+(executable
+ (public_name appel)
+ (name main)
+ (libraries appel))
+
+(ocamllex lexer)
+
+(menhir
+ (modules parser))
