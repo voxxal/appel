@@ -13,7 +13,8 @@ let letter = ['a'-'z'] | ['A'-'Z']
 
 rule token = parse
     | eof { EOF }
-    | '\n' | ws { token lexbuf }
+    | '\n' { Lexing.new_line lexbuf; token lexbuf }
+    | ws { token lexbuf }
     | "while" {WHILE}
     | "for" {FOR}
     | "to" {TO}
@@ -60,8 +61,9 @@ rule token = parse
     | "/*" { depth := 1; comment lexbuf}
     and string = parse
     | '"' { () }
+    | '\n' { Lexing.new_line lexbuf; Buffer.add_char string_buf '\n'; string lexbuf }
     | "\\t" { Buffer.add_char string_buf '\t'; string lexbuf }
-    | "\\n" | '\n' { Buffer.add_char string_buf '\n'; string lexbuf }
+    | "\\n" { Buffer.add_char string_buf '\n'; string lexbuf }
     | "\\\\" { Buffer.add_char string_buf '\\'; string lexbuf }
     | "\\\"" { Buffer.add_char string_buf '"'; string lexbuf }
     | eof { ErrorMsg.error (Lexing.lexeme_start_p lexbuf) "unclosed string" }
@@ -75,5 +77,6 @@ rule token = parse
                     token lexbuf 
                 else 
                     ErrorMsg.error (Lexing.lexeme_start_p lexbuf) "unclosed comment"; }
+    | '\n' { Lexing.new_line lexbuf; comment lexbuf }
     | _ { comment lexbuf }
     | eof { ErrorMsg.error (Lexing.lexeme_start_p lexbuf) "unclosed comment";}

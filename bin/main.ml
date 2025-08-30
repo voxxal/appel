@@ -92,7 +92,7 @@ let print_token : Parser.token -> string =
 
 
 let lex_driver channel =
-  let lexbuf = Lexing.from_channel channel in
+  let lexbuf = Lexing.from_channel ~with_positions: true channel in
   let rec lex () =
     let tok = Lexer.token lexbuf in
     print_endline (print_token tok);
@@ -105,14 +105,26 @@ let lex_driver channel =
 
 let parse_driver channel =
     let lexbuf = Lexing.from_channel channel in
-    Parser.program Lexer.token lexbuf
+    Prabsyn.print stdout (Parser.program Lexer.token lexbuf)
+
+let semant_driver channel =
+  let lexbuf = Lexing.from_channel channel in
+  let parsed = Parser.program Lexer.token lexbuf in
+  let (_, t) = Semant.transExp Env.base_venv Env.base_tenv parsed in
+  (* print_endline t *)
+  ()
 
 
 let () = 
-  let file = open_in Sys.argv.(1) in
+  let filename = Sys.argv.(1) in
+  let file = open_in filename in
+    ErrorMsg.fileName := filename;
     print_endline "%% lex step";
     lex_driver file;
     print_endline "%% parse step";
     seek_in file 0;
     ignore (parse_driver file);
+    print_endline "%% semant step";
+    seek_in file 0;
+    ignore (semant_driver file);
     close_in file

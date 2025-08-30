@@ -15,7 +15,7 @@ exception Error of string
 
 let _error (pos: Lexing.position) msg =
   anyErrors := true;
-  Printf.sprintf "%d:%d in %s: %s" pos.pos_lnum pos.pos_cnum !fileName msg
+  Printf.sprintf "%d:%d in %s: %s" pos.pos_lnum (pos.pos_cnum - pos.pos_bol) !fileName msg
 
 let error pos msg =
   raise (Error (_error pos msg))

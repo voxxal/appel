@@ -1,7 +1,8 @@
 (executable
  (public_name appel)
  (name main)
- (libraries appel))
+ (libraries appel)
+ (flags (:standard -w -26-27-32)))
 
 (ocamllex lexer)
 
