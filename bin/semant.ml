@@ -17,17 +17,17 @@ let print_venv (venv: venv) =
   (fun k v -> 
     print_endline (Symbol.name k ^ ":"); 
     match v with 
-    | E.FunEntry {formals; result} -> 
+    | E.FunEntry {formals; result; _} -> 
       print_endline "Formals:";
       print_endline (String.concat ",\n" (List.map Types.format formals));
       print_endline "Result:";
       print_endline (Types.format result);
-    | VarEntry {ty} -> print_endline (Types.format ty)) venv
+    | VarEntry {ty; _} -> print_endline (Types.format ty)) venv
 
 let rec transProg exp =
-  let (_, t) = transExp E.base_venv E.base_tenv exp in
+  let (_, t) = transExp E.base_venv E.base_tenv Translate.outermost exp in
   ()
-and transDec venv tenv = function
+and transDec venv tenv level = function
   | A.FunctionDec decs ->
     let param_type ({name; escape; typ; pos}: A.field) = 
       (match Symbol.look typ tenv with Some t -> (name, t)  | None -> error pos "type not found") in
@@ -36,13 +36,20 @@ and transDec venv tenv = function
       | None -> Types.UNIT
     in
     let enter_header venv ({name; params; result; _} : A.fundec) =
-      Symbol.enter name (Env.FunEntry { formals = List.map (fun p -> let (_, t) = param_type p in t) params; result = res_type result }) venv
+      let label = Temp.new_label () in
+      Symbol.enter name (E.FunEntry {
+        level = Translate.new_level level label (List.map (fun (f: A.field) -> !(f.escape)) params);
+        label;
+        formals = List.map (fun p -> let (_, t) = param_type p in t) params;
+        result = res_type result 
+      }) venv
     in
-    let enter_param venv (name, ty) = Symbol.enter name (E.VarEntry { ty }) venv in
-    let process_fun venv ({params; result; body; pos; _} : A.fundec) =
+    let enter_param venv ((name, ty), access) = Symbol.enter name (E.VarEntry {access; ty}) venv in
+    let process_fun venv ({name; params; result; body; pos;} : A.fundec) =
+      let level = match Symbol.look name venv with Some(E.FunEntry {level; _}) -> level | _ -> impossible "function name changed?" in
       let params' = List.map param_type params in
-      let body_venv = List.fold_left enter_param venv params' in
-      let (_, actual_res_type) = transExp body_venv tenv body in
+      let body_venv = List.fold_left enter_param venv (List.combine params' (Translate.formals level)) in
+      let (_, actual_res_type) = transExp body_venv tenv level body in
       if Types.(actual_res_type = res_type result) then
         venv
       else error pos "result type did not match expected result type"
@@ -60,21 +67,23 @@ and transDec venv tenv = function
     let venv_final = List.fold_left process_fun venv_headers decs in
     (venv_final, tenv)
   | VarDec {name; escape; typ = Some typ; init; pos} -> 
-    let (_, init_ty) = transExp venv tenv init in
+    let (_, init_ty) = transExp venv tenv level init in
     let (type_sym, _) = typ in
     let dec_type = Symbol.look type_sym tenv in
+    let access = Translate.alloc_local level !escape in
     (match dec_type with
     | Some typ ->
       if Types.(init_ty = typ) then
-        (Symbol.enter name (E.VarEntry {ty = init_ty}) venv, tenv)
+        (Symbol.enter name (E.VarEntry {access; ty = init_ty}) venv, tenv)
       else error pos "type does not match expected type in var declaration"
     | None -> error pos "type in variable declaration is undefined")
   | VarDec {name; escape; typ = None; init; pos} -> 
-    let (_, ty) = transExp venv tenv init in
+    let (_, ty) = transExp venv tenv level init in
+    let access = Translate.alloc_local level !escape in
     if ty = Types.NIL then
       error pos "variable initalized to nil with no type defined"
     else
-      (Symbol.enter name (E.VarEntry {ty}) venv, tenv)
+      (Symbol.enter name (E.VarEntry {access; ty}) venv, tenv)
   | TypeDec decs -> 
     let enter_header tenv ({name; _} : A.typedec) = 
       Symbol.enter name (Types.NAME (name, ref None)) tenv
@@ -115,7 +124,7 @@ and transDec venv tenv = function
     let tenv_final = List.fold_left enter_type tenv_headers decs in
     check_cycle tenv_final decs;
     (venv, tenv_final)
-and transExp ?(breakable=false) (venv: venv) (tenv: tenv) (exp: A.exp) =
+and transExp ?(breakable=false) (venv: venv) (tenv: tenv) (level: Translate.level) (exp: A.exp) =
   let rec trexp (exp : A.exp) =
     match exp with
       | VarExp var -> trvar var
@@ -124,7 +133,7 @@ and transExp ?(breakable=false) (venv: venv) (tenv: tenv) (exp: A.exp) =
       | StringExp _ -> ((), Types.STRING)
       | CallExp { func; args; pos } ->
         (match (Symbol.look func venv) with
-        | Some (E.FunEntry {formals; result}) -> 
+        | Some (E.FunEntry {formals; result; _}) -> 
           let arg_types = List.map get_type args in
           if List.equal Types.(=) arg_types formals then
             ((), result)
@@ -192,15 +201,15 @@ and transExp ?(breakable=false) (venv: venv) (tenv: tenv) (exp: A.exp) =
         else error pos "type of condition is not int"
       | WhileExp {test; body; pos} ->
         if Types.(get_type test = INT) then
-          let (_, body_ty) = transExp ~breakable:true venv tenv body in
+          let (_, body_ty) = transExp ~breakable:true venv tenv level body in
           if Types.(body_ty = UNIT) then
             ((), UNIT)
           else error pos "while must return unit"
         else error pos "type of condition is not int"
       | ForExp {var; escape; lo; hi; body; pos} ->
         if all_type INT [get_type lo; get_type hi] then
-         let for_venv = Symbol.enter var (E.VarEntry { ty = INT }) venv in
-         let (_, body_ty) = transExp ~breakable:true for_venv tenv body in
+         let for_venv = Symbol.enter var (E.VarEntry { access = Translate.alloc_local level !escape; ty = INT }) venv in
+         let (_, body_ty) = transExp ~breakable:true for_venv tenv level body in
           if Types.(body_ty = UNIT) then
             ((), UNIT)
           else error pos "for statement body must return unit"
@@ -211,8 +220,8 @@ and transExp ?(breakable=false) (venv: venv) (tenv: tenv) (exp: A.exp) =
         else 
           error pos "break not in loop construct"
       | LetExp {decs; body; pos} -> 
-        let (venv', tenv') = List.fold_left (fun (venv, tenv) dec -> transDec venv tenv dec) (venv, tenv) decs in
-        transExp venv' tenv' body
+        let (venv', tenv') = List.fold_left (fun (venv, tenv) dec -> transDec venv tenv level dec) (venv, tenv) decs in
+        transExp venv' tenv' level body
       | ArrayExp {typ; size; init; pos} -> 
         (match (Option.map Types.actual_ty (Symbol.look typ tenv)) with
         | Some (ARRAY (internal_ty, id)) ->
@@ -224,7 +233,7 @@ and transExp ?(breakable=false) (venv: venv) (tenv: tenv) (exp: A.exp) =
   and trvar = function
     | SimpleVar (sym, pos) ->
       (match Symbol.look sym venv with
-        | Some(E.VarEntry { ty }) -> ((), Types.actual_ty ty)
+        | Some(E.VarEntry {ty; _}) -> ((), Types.actual_ty ty)
         | Some(E.FunEntry _) -> error pos "tried to access variable, got function"
         | None -> error pos ("undefined variable: " ^ Symbol.name sym))
     | FieldVar (var, sym, pos) ->

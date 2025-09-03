@@ -1,14 +1,10 @@
 let anyErrors = ref false
 let fileName = ref ""
-let lineNum = ref 1
-let linePos = ref [1]
 let source_stream = ref stdin
 
 let reset () =
   anyErrors := false;
   fileName := "";
-  lineNum := 1;
-  linePos := [1];
   source_stream := stdin;
 
 exception Error of string

@@ -110,7 +110,8 @@ let parse_driver channel =
 let semant_driver channel =
   let lexbuf = Lexing.from_channel channel in
   let parsed = Parser.program Lexer.token lexbuf in
-  let (_, t) = Semant.transExp Env.base_venv Env.base_tenv parsed in
+  let _ = FindEscape.find_escape parsed in
+  let (_, t) = Semant.transExp Env.base_venv Env.base_tenv Translate.outermost parsed in
   (* print_endline t *)
   ()
 

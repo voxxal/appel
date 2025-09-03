@@ -2,7 +2,7 @@
  (public_name appel)
  (name main)
  (libraries appel)
- (flags (:standard -w -26-27-32)))
+ (flags (:standard -w -26-27-32-69)))
 
 (ocamllex lexer)
 
