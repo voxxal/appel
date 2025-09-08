@@ -22,6 +22,5 @@ and binop =
 and relop = 
   | EQ | NE | LT | GT | LE | GE 
   | ULT | ULE | UGT | UGE
-(* 
+
 val not_rel : relop -> relop
-val commute: relop -> relop *)

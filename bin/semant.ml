@@ -26,7 +26,9 @@ let print_venv (venv: venv) =
     | VarEntry {ty; _} -> print_endline (Types.format ty)) venv
 
 let rec transProg exp =
-  let (_, t) = transExp E.base_venv E.base_tenv Tr.outermost exp in
+  let main_level = Tr.new_level Tr.outermost (Symbol.symbol "main") [] in
+  let exp, _ = transExp E.base_venv E.base_tenv Tr.outermost exp in
+  Tr.proc_entry_exit main_level exp;
   Tr.get_result ()
 and transDecs ?(breakpoint=None) venv tenv level decs =
   let transDec (venv, tenv, exps) = function
@@ -52,9 +54,9 @@ and transDecs ?(breakpoint=None) venv tenv level decs =
         let params' = List.map param_type params in
         let body_venv = List.fold_left enter_param venv (List.combine params' (Tr.formals level)) in
         let body_exp, body_res_type = transExp ~breakpoint body_venv tenv level body in
-        if Types.(body_res_type = res_type result) then
-          venv
-        else error pos "result type did not match expected result type"
+        if not Types.(body_res_type = res_type result) then error pos "result type did not match expected result type";
+        Tr.proc_entry_exit level body_exp;
+        venv
       in
       let rec check_name_dupe found_names (decs : A.fundec list) =
         match decs with

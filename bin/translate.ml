@@ -112,11 +112,11 @@ let cond_exp test then' else' =
     let join = Temp.new_label () in
     Nx (seq [
       gen_stm t f;
-      T.LABEL t;
-      then_stm;
-      T.JUMP (T.NAME join, [join]);
       T.LABEL f;
       else_stm;
+      T.JUMP (T.NAME join, [join]);
+      T.LABEL t;
+      then_stm;
       T.LABEL join;
     ])
   | Ex then_exp, Some (Ex else_exp) ->
@@ -126,14 +126,15 @@ let cond_exp test then' else' =
     let join = Temp.new_label () in
     Ex (T.ESEQ (seq [
       gen_stm t f;
-      T.LABEL t;
-      T.MOVE (T.TEMP r, then_exp);
-      T.JUMP (T.NAME join, [join]);
       T.LABEL f;
       T.MOVE (T.TEMP r, else_exp);
+      T.JUMP (T.NAME join, [join]);
+      T.LABEL t;
+      T.MOVE (T.TEMP r, then_exp);
       T.LABEL join;
     ], T.TEMP r))
   (* The example for this branch makes me so confused so i think this is what its saying *)
+  (* TODO make the false label appear first after gen_stm *)
   | Cx then_cond, Some (Ex else_exp) ->
     let r = Temp.new_temp () in
     let f = Temp.new_label () in
@@ -197,6 +198,7 @@ let while_exp breakpoint test body =
     gen_stm body_label breakpoint;
     T.LABEL body_label;
     body_stm;
+    T.JUMP (T.NAME test_label, [test_label]);
     T.LABEL breakpoint;
   ])
 
@@ -223,6 +225,8 @@ let let_exp exps body_exp =
   Ex (T.ESEQ (seq (List.map un_nx exps), un_ex body_exp))
 
 
-let proc_entry_exit level body = ()
+let proc_entry_exit {frame; _} body =
+  let body' = Frame.proc_entry_exit_1 frame (T.MOVE (T.TEMP Frame.rv, un_ex body)) in
+  fragments := Frame.PROC {frame; body= body'} :: !fragments
 
 let get_result () = !fragments
