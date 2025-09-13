@@ -1,6 +1,7 @@
 (executable
  (public_name appel)
  (name main)
+ (modes byte exe)
  (libraries appel)
  (flags (:standard -w -8-27-32-26)))
 

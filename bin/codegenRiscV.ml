@@ -148,8 +148,7 @@ let codegen _frame stm =
     | arg :: rest ->
       if i < 8 then
         let dst = List.nth Frame.arg_regs i in
-        let src = munch_exp arg in
-        munch_stm (MOVE (TEMP dst, TEMP src));
+        munch_stm (MOVE (TEMP dst, arg));
         dst :: munch_args (i + 1) rest
       else impossible "frame args not impled" 
   in munch_stm stm;

@@ -57,7 +57,7 @@ let rec static_link def_level curr_level =
   if def_level.id == curr_level.id then T.TEMP Frame.fp
   else Frame.exp (List.hd (Frame.formals curr_level.frame)) (static_link def_level curr_level.parent)
 
-let simple_var (def_level, access) use_level = Ex (Frame.exp access (static_link def_level use_level))
+let simple_var (def_level, access) use_level = Ex (Frame.exp access (static_link def_level.parent use_level))
 
 let field_var base i = 
   Ex (T.MEM (T.BINOP (T.PLUS, un_ex base, T.CONST (i * Frame.word_size))))
@@ -206,7 +206,7 @@ let break_exp breakpoint =
   Nx (T.JUMP (T.NAME breakpoint, [breakpoint]))
 
 let call_exp def_level use_level label args =
-  let sl = static_link def_level use_level in
+  let sl = static_link def_level.parent use_level in
   Ex (T.CALL (T.NAME label, sl :: List.map un_ex args))
 
 let seq_exp = function

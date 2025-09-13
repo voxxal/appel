@@ -27,7 +27,7 @@ let print_venv (venv: venv) =
 
 let rec transProg exp =
   let main_level = Tr.new_level Tr.outermost (Symbol.symbol "main") [] in
-  let exp, _ = transExp E.base_venv E.base_tenv Tr.outermost exp in
+  let exp, _ = transExp E.base_venv E.base_tenv main_level exp in
   Tr.proc_entry_exit main_level exp;
   Tr.get_result ()
 and transDecs ?(breakpoint=None) venv tenv level decs =
@@ -50,12 +50,12 @@ and transDecs ?(breakpoint=None) venv tenv level decs =
       in
       let enter_param venv ((name, ty), access) = Symbol.enter name (E.VarEntry {access; ty}) venv in
       let process_fun venv ({name; params; result; body; pos;} : A.fundec) =
-        let level = match Symbol.look name venv with Some(E.FunEntry {level; _}) -> level | _ -> impossible "process_fun @ Semant.transDecs.transDec" in
+        let level' = match Symbol.look name venv with Some(E.FunEntry {level; _}) -> level | _ -> impossible "process_fun @ Semant.transDecs.transDec" in
         let params' = List.map param_type params in
-        let body_venv = List.fold_left enter_param venv (List.combine params' (Tr.formals level)) in
-        let body_exp, body_res_type = transExp ~breakpoint body_venv tenv level body in
+        let body_venv = List.fold_left enter_param venv (List.combine params' (Tr.formals level')) in
+        let body_exp, body_res_type = transExp ~breakpoint body_venv tenv level' body in
         if not Types.(body_res_type = res_type result) then error pos "result type did not match expected result type";
-        Tr.proc_entry_exit level body_exp;
+        Tr.proc_entry_exit level' body_exp;
         venv
       in
       let rec check_name_dupe found_names (decs : A.fundec list) =
@@ -137,7 +137,7 @@ and transExp ?(breakpoint=None) (venv: venv) (tenv: tenv) (level: Tr.level) (exp
       | StringExp (str, pos) -> (Tr.string_exp str, Types.STRING)
       | CallExp { func; args; pos } ->
         (match Symbol.look func venv with
-        | Some (E.FunEntry { level=def_level; label; formals; result }) -> 
+        | Some (E.FunEntry { level = def_level; label; formals; result }) -> 
           let arg_exps, arg_types = List.split (List.map trexp args) in
           if List.equal Types.(=) arg_types formals then
             (Tr.call_exp def_level level label arg_exps, result)
